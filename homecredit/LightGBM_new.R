@@ -11,7 +11,6 @@ cat("Loading data...\n")
 
 data_dir = "C:\\Users\\Viacheslav_Pyrohov\\Desktop\\Kaggle_Homecredit competition"
 
-bbalance <- read_csv(file.path(data_dir, "bureau_balance.csv"))
 bureau <- read_csv(file.path(data_dir, "bureau.csv"))
 cc_balance <- read_csv(file.path(data_dir, "credit_card_balance.csv"))
 payments <- read_csv(file.path(data_dir, "installments_payments.csv"))
@@ -24,13 +23,34 @@ te <- read_csv(file.path(data_dir, "application_test.csv"))
 cat("Preprocessing...\n")
 
 fn <- funs(mean, sd, min, max, sum, n_distinct, .args = list(na.rm = TRUE))
+time_coef = log(0.5)/(-24) #apply weight coefficient to historical data, coef = 0.5 weight for 24 month ago
 
-sum_bbalance <- bbalance %>%
-  mutate_if(is.character, funs(factor(.) %>% as.integer)) %>% 
+#---------------------------
+cat("Preprocessing bureau_balance.csv...\n")
+bbalance <- read_csv(file.path(data_dir, "bureau_balance.csv"))
+
+agr_bbalance <- bbalance %>% #create pre dataset only with relevant info and only with status changes #need to check whether it is good approach:
+  #to improve: squash all rows regarded to 'C', but leave others
+  #to improve: efficiency - this part runs too long
+  filter(!STATUS %in% 'X') %>% #filter out STATUS == 'X' as this mean absense of data
   group_by(SK_ID_BUREAU) %>% 
-  summarise_all(fn) 
-rm(bbalance); gc()
+  mutate(STATUS_LAG = if_else(STATUS != lead(STATUS, default = 999, order_by = MONTHS_BALANCE), 1, 0)) %>%
+  filter(STATUS_LAG == 1) %>%
+  select(-c(STATUS_LAG))
 
+sum_bbalance <- agr_bbalance %>%
+  #to improve: treat warnings
+  #to improve: delete redundant variables
+  mutate(STATUS = if_else(STATUS == 'C', -1, as.numeric(STATUS)), #treat 'C' = closed as -1 #this returns warning, but the result is OK and validated
+         STATUS_WEIGHTED = exp(time_coef*(MONTHS_BALANCE))*STATUS) %>% 
+  group_by(SK_ID_BUREAU) %>% 
+  mutate(START_STATUS = first(STATUS, MONTHS_BALANCE),
+         END_STATUS = last(STATUS, MONTHS_BALANCE)) %>%
+  summarise_all(fn)
+
+rm(bbalance, agr_bbalance); gc()
+
+#---------------------------
 sum_bureau <- bureau %>% 
   left_join(sum_bbalance, by = "SK_ID_BUREAU") %>% 
   select(-SK_ID_BUREAU) %>% 
