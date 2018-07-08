@@ -9,7 +9,7 @@ set.seed(0)
 #---------------------------
 cat("Loading data...\n")
 
-data_dir = "C:\\Users\\Viacheslav_Pyrohov\\Desktop\\Kaggle_Homecredit competition"
+data_dir = "C:\\Users\\Eovil\\Desktop\\Kaggle_Homecredit competition"
 
 bureau <- read_csv(file.path(data_dir, "bureau.csv"))
 cc_balance <- read_csv(file.path(data_dir, "credit_card_balance.csv"))

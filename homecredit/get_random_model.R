@@ -4,17 +4,6 @@ load(file = paste0(data_dir, "//Calculation//input_y.Rdata"))
 tr <- read_csv(file.path(data_dir, "application_train.csv"))
 te <- read_csv(file.path(data_dir, "application_test.csv"))
 
-tr$TARGET = NULL
-tr_te = rbind(tr, te)
-dt = as.data.table(tr_te)
-
-count_random_vars = 100
-predictor = y
-
-test_res = get_random_model(dt)
-
-test_res
-
 get_random_model = function(dt, count_random_vars = 100, predictor = y) {
   col_num = ncol(dt)
   for (cura in 1:count_random_vars) {
@@ -62,7 +51,6 @@ get_random_model = function(dt, count_random_vars = 100, predictor = y) {
           fla = paste0(fla, list_params[i])
         }
       }
-      fla
       list_params = unique(list_params)
       # apply model
       dt_mod = as.data.table(cbind(predictor, dt[1:length(predictor), list_params, with = FALSE]))
