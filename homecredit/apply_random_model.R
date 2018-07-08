@@ -4,8 +4,8 @@ library(moments)
 library(data.table)
 library(recommenderlab)
 library(tidyverse)
-
-set.seed(0)
+library(sqldf)
+#set.seed(0)
 
 #---------------------------
 cat("Loading data...\n")
@@ -40,7 +40,6 @@ sum_bbalance <- bbalance %>%
 
 rm(bbalance); gc()
 
-# old approach
 # sum_bbalance <- bbalance %>%
 #   mutate_if(is.character, funs(factor(.) %>% as.integer)) %>%
 #   group_by(SK_ID_BUREAU) %>%
@@ -58,7 +57,9 @@ bureau <- bureau %>% #to do: validate if this approach gives gain
          CREDIT_UNTYPICAL_CURRENCY = if_else(CREDIT_CURRENCY != 'currency 1', 1, 0)) %>% #old approach could be better - check
   select(-c(CREDIT_ACTIVE, CREDIT_CURRENCY))
 
-# table(sum_bureau_test$CREDIT_CURRENCY) #currently continue working on bureau data
+# table(sum_bureau_test$CREDIT_CURRENCY)
+# View(bbalance[bbalance$SK_ID_BUREAU == 6086945,])
+# View(head(bureau_test, 100000))
 
 sum_bureau <- bureau %>% 
   left_join(sum_bbalance, by = "SK_ID_BUREAU") %>% 
@@ -180,20 +181,7 @@ tr_te <- tr %>%
          CAR_TO_BIRTH_RATIO = OWN_CAR_AGE / DAYS_BIRTH,
          CAR_TO_EMPLOY_RATIO = OWN_CAR_AGE / DAYS_EMPLOYED,
          PHONE_TO_BIRTH_RATIO = DAYS_LAST_PHONE_CHANGE / DAYS_BIRTH,
-         PHONE_TO_EMPLOY_RATIO = DAYS_LAST_PHONE_CHANGE / DAYS_EMPLOYED,
-         # add features from corr check loop
-         AMT_DRAWINGS_OTHER_CURRENT_avg + DAYS_LAST_DUE_avg, # new corr = 0.086, diff = 0.059
-         DAYS_LAST_DUE_avg + AMT_DRAWINGS_OTHER_CURRENT_sd, # new corr = 0.0856, diff = 0.0586
-         CNT_DRAWINGS_OTHER_CURRENT_avg + CNT_INSTALMENT_MATURE_CUM_avg, # new corr = -0.084, diff = 0.0555
-         AMT_PAYMENT_CURRENT_avg + DAYS_LAST_DUE_avg, # new corr = 0.08, diff = 0.05385
-         
-         AMT_CREDIT_SUM_max + RATE_INTEREST_PRIMARY_sd, # new corr = 0.31, check this carefully
-         AMT_ANNUITY_min.y + RATE_INTEREST_PRIVILEGED_sd, # new corr = 0.13, check this carefully
-         
-         RATE_INTEREST_PRIMARY_NA = if_else(is.na(RATE_INTEREST_PRIMARY_avg) | is.nan(RATE_INTEREST_PRIMARY_avg), 0, 1), #added by intuition
-         RATE_INTEREST_PRIVILEGED_NA = if_else(is.na(RATE_INTEREST_PRIVILEGED_avg) | is.nan(RATE_INTEREST_PRIVILEGED_avg), 0, 1) #added by intuition
-         ) %>%
-  select(-one_of(drop_cols))
+         PHONE_TO_EMPLOY_RATIO = DAYS_LAST_PHONE_CHANGE / DAYS_EMPLOYED)
 
 docs <- str_subset(names(tr), "FLAG_DOC")
 live <- str_subset(names(tr), "(?!NFLAG_)(?!FLAG_DOC)(?!_FLAG_)FLAG_")
@@ -227,58 +215,32 @@ gc()
 #---------------------------
 cat("Create additional variables...\n")
 tr_te = as.data.table(tr_te); gc()
-# 
-# # create vars for NaN observations
-# # CONCLUSION: NAs already treated by na feature which is enough predicative
-# #col_num = ncol(tr_te)
-# #for (i in 3:col_num) {
-# #  colname = names(tr_te)[i]
-# #  tr_te[is.na(eval(as.name(colname)))|is.nan(eval(as.name(colname)))|is.null(eval(as.name(colname)))|is.infinite(eval(as.name(colname))), 
-# #        paste0(colname, '_nulls') := 1]
-# #  #tr_te[is.na(eval(as.name(paste0(colname, '_nulls')))), paste0(colname, '_nulls') := 0]
-# #}
-# 
-# # outliers marking
-# outliers_remove = function(dt,col_from,col_to) {
-#   for (i in col_from:col_to) {
-#     colname = names(dt)[i]
-#     qnt <- quantile(dt[,eval(as.name(colname))], probs=c(.25, .75), na.rm = T)
-#     H <- 1.5 * (qnt[2]-qnt[1])
-#     dt[eval(as.name(colname)) < (qnt[1] - H), paste0(colname, '_outliers') := -1]
-#     dt[eval(as.name(colname)) > (qnt[2] + H), paste0(colname, '_outliers') := 1]
-#     #dt[is.na(eval(as.name(paste0(colname, '_outliers')))), paste0(colname, '_outliers') := 0]
-#   }
-#   return(as.data.table(dt))
-# }
-# 
-# tr_te = outliers_remove(tr_te, col_from = 3, col_to = col_num)
-# gc()
 
-# apply random models
-# IMPORTANT! It seems that this approach really works. Check file 2rand_cols...csv
-vect_fla = c('y ~ CNT_PAYMENT_max + NAME_CONTRACT_STATUS_sum.y', 
-             'y ~ REGION_RATING_CLIENT_W_CITY + AMT_APPLICATION_mean',
-             'y ~ DPD_n_distinct + LIVE_REGION_NOT_WORK_REGION + NAME_EDUCATION_TYPE',
-             'y ~ DAYS_INSTALMENT_min + NAME_INCOME_TYPE + CODE_REJECT_REASON_min',
-             'y ~ FLAG_DOCUMENT_7 + DAYS_ENTRY_PAYMENT_sd + FLAG_DOCUMENT_3',
-             'y ~ CREDIT_ACTIVE_BOOL_sum + DAYS_CREDIT_mean'
-            )
-list_params = list(c('CNT_PAYMENT_max', 'NAME_CONTRACT_STATUS_sum.y'), 
-                   c('REGION_RATING_CLIENT_W_CITY', 'AMT_APPLICATION_mean'),
-                   c('DPD_n_distinct', 'LIVE_REGION_NOT_WORK_REGION', 'NAME_EDUCATION_TYPE'),
-                   c('newcol_DAYS_INSTALMENT_min', 'NAME_INCOME_TYPE', 'CODE_REJECT_REASON_min'),
-                   c('newcol_FLAG_DOCUMENT_7', 'DAYS_ENTRY_PAYMENT_sd', 'FLAG_DOCUMENT_3'),
-                   c('newcol_CREDIT_ACTIVE_BOOL_sum', 'DAYS_CREDIT_mean')
-                   )
-for (i in 1:length(vect_fla)) {
-  fla = vect_fla[i]
-  params = list_params[[i]]
-  # apply model
-  dt_mod = as.data.table(cbind(y, tr_te[1:length(y), params, with = FALSE]))
-  mod = lm(data=dt_mod, formula=as.formula(fla)) #to do: add random model here
-  tr_te[, paste0('newcol','_', sub('y ~ ', '', fla)) := predict(mod, tr_te[, params, with = FALSE])]
+# create vars for NaN observations
+# CONCLUSION: NAs already treated by na feature which is enough predicatiove
+#col_num = ncol(tr_te)
+#for (i in 3:col_num) {
+#  colname = names(tr_te)[i]
+#  tr_te[is.na(eval(as.name(colname)))|is.nan(eval(as.name(colname)))|is.null(eval(as.name(colname)))|is.infinite(eval(as.name(colname))), 
+#        paste0(colname, '_nulls') := 1]
+#  #tr_te[is.na(eval(as.name(paste0(colname, '_nulls')))), paste0(colname, '_nulls') := 0]
+#}
+
+# outliers marking
+outliers_remove = function(dt,col_from,col_to) {
+  for (i in col_from:col_to) {
+    colname = names(dt)[i]
+    qnt <- quantile(dt[,eval(as.name(colname))], probs=c(.25, .75), na.rm = T)
+    H <- 1.5 * (qnt[2]-qnt[1])
+    dt[eval(as.name(colname)) < (qnt[1] - H), paste0(colname, '_outliers') := -1]
+    dt[eval(as.name(colname)) > (qnt[2] + H), paste0(colname, '_outliers') := 1]
+    #dt[is.na(eval(as.name(paste0(colname, '_outliers')))), paste0(colname, '_outliers') := 0]
+  }
+  return(as.data.table(dt))
 }
-rm(fla, params, vect_fla, list_params, dt_mod, mod); gc()
+
+tr_te = outliers_remove(tr_te, col_from = 3, col_to = col_num)
+gc()
 
 # create matrix from dt without RAM issues
 # original article with the method could be found here:
@@ -300,7 +262,7 @@ for (i in 1:n) {
                            stringsAsFactors = FALSE,
                            colClasses = rep("numeric", nrow(temp_names)),
                            data.table = TRUE)
-
+  
   gc(verbose = FALSE)
   if (i > 1) {
     cat("Coercing to matrix.\n", sep = "")
@@ -326,80 +288,119 @@ for (i in 1:n) {
 }
 gc()
 
+#matr_scan = scan(file = paste0(data_dir, "//Calculation//input_bigmatrix.csv"), sep = ',')
+#tr_te = matrix(matr_scan, ncol = length(temp_names$temp_names), byrow = TRUE, dimnames = list(NULL, temp_names$temp_names))
+#rm(matr_scan, temp_names); gc()
+
 #---------------------------
 cat("Save & load long dataset...\n")
 saveRDS(tr_te, file = paste0(data_dir, "//Calculation//input_bigmatrix_long.rds"))
 #readRDS(paste0(data_dir, "//Calculation//input_bigmatrix_long.rds"))
 
-#---------------------------
-cat("Preparing data...\n")
-#dtest <- lgb.Dataset(data = tr_te[-tri, ]) #it seems that this approach do not work for LightGBM. Raise questions for this.
-dtest <- tr_te[-tri, ]
-tr_te <- tr_te[tri, ]
-tri <- caret::createDataPartition(y, p = 0.9, list = F) %>% c()
+# apply cycle to calculate new variables
+lgbm_fin = data.frame()
+for (i in 1:20) {
+  cat(paste0("Start building model ???", i, "...\n"))
+  
+  load(file = paste0(data_dir, "//Calculation//input_bigmatrix_short.RData"), .GlobalEnv)
+  load(file = paste0(data_dir, "//Calculation//input_tri.RData"), .GlobalEnv)
+  load(file = paste0(data_dir, "//Calculation//input_y.RData"), .GlobalEnv)
+  
+  # apply random models
+  # create random vars
+  tr_te_dt = as.data.table(tr_te)
+  input_random_mod = as.matrix(get_random_model(tr_te_dt, 100))
+  rm(tr_te_dt); gc()
+  tr_te = cbind(tr_te, input_random_mod)
+  rm(input_random_mod); gc()
+  
+  #---------------------------
+  cat("Preparing data...\n")
+  #dtest <- lgb.Dataset(data = tr_te[-tri, ]) #it seems that this approach do not work for LightGBM. Raise questions for this.
+  #dtest <- tr_te[-tri, ] # we dont need to predict anything here
+  tr_te <- tr_te[tri, ]
+  tri <- caret::createDataPartition(y, p = 0.9, list = F) %>% c()
+  
+  dtrain = lgb.Dataset(data = tr_te[tri, ], label = y[tri])
+  dval = lgb.Dataset(data = tr_te[-tri, ], label = y[-tri])
+  cols <- colnames(tr_te)
+  
+  rm(tr_te, y, tri); gc()
+  
+  #---------------------------
+  cat("Training model...\n")
+  
+  # parameters taken from https://www.kaggle.com/dromosys/fork-of-fork-lightgbm-with-simple-features-cee847/code
+  #lgb.grid = list(objective = "binary",
+  #                metric = "auc",
+  #                #n_estimators=10000,
+  #                learning_rate=0.02, # in source - 0.02
+  #                num_leaves=32,
+  #                colsample_bytree=0.9497036,
+  #                subsample=0.8715623,
+  #                max_depth=8,
+  #                reg_alpha=0.04,
+  #                reg_lambda=0.073,
+  #                min_split_gain=0.0222415,
+  #                min_child_weight=40,
+  #                is_unbalance = TRUE)
+  
+  lgb.grid = list(objective = "binary",
+                  metric = "auc",
+                  learning_rate=0.02, # in source - 0.02
+                  num_leaves=255, #originaly - 127
+                  #colsample_bytree=0.9497036,
+                  #subsample=0.8715623,
+                  #max_depth=8,
+                  #reg_alpha=0.04,
+                  #reg_lambda=0.073,
+                  #min_split_gain=0.0222415,
+                  #min_child_weight=40,
+                  feature_fraction = 0.95, #originaly 0.5
+                  bagging_freq = 1,
+                  bagging_fraction = 0.8,
+                  use_missing = TRUE,
+                  is_unbalance = TRUE)
+  
+  m_gbm_cv = lgb.train(params = lgb.grid,
+                       data = dtrain,
+                       num_threads = 10,
+                       nrounds = 5,
+                       eval_freq = 20,
+                       #boosting = 'dart', # todo: check the difference
+                       #num_leaves = 255, # typical: 255, usually {15, 31, 63, 127, 255, 511, 1023, 2047, 4095}.
+                       #eval = "binary_error", #can place own validation function here #unknown parameter
+                       #categorical_feature = categoricals.vec,
+                       num_iterations = 2000, #2000, equivalent of n_estimators
+                       early_stopping_round = 200,
+                       valids = list(train = dval),
+                       #nfold = 5, #unknown parameter
+                       #stratified = TRUE, #unknown parameter
+                       verbose = 2)
+  
+  #---------------------------
+  
+  lgbm_res = lgb.importance(m_gbm_cv, percentage = TRUE)
+  lgbm_newcol = lgbm_res[Feature %like% 'newcol_', ]
+  lgbm_oldcol = lgbm_res[!Feature %like% 'newcol_', ]
+  
+  lgbm_res = sqldf("select
+                      tf.*,
+                      tn.Feature NewFeature,
+                      tn.Gain NewGain
+                    from lgbm_oldcol tf
+                    left join lgbm_newcol tn 
+                      on charindex(tf.Feature, tn.Feature)
+                    order by tn.Feature desc")
+  lgbm_res = lgbm_res %>%
+    group_by(NewFeature) %>%
+    mutate(DiffGain = NewGain - sum(Gain)) %>%
+    filter(DiffGain > 0)
+  lgbm_fin = if(nrow(lgbm_fin) == 0) lgbm_res else rbind(lgbm_fin, lgbm_res)
+  rm(dtrain, dval); gc()
+}
 
-dtrain = lgb.Dataset(data = tr_te[tri, ], label = y[tri])
-dval = lgb.Dataset(data = tr_te[-tri, ], label = y[-tri])
-cols <- colnames(tr_te)
-
-rm(tr_te, y, tri); gc()
-
-#---------------------------
-cat("Training model...\n")
-
-# parameters taken from https://www.kaggle.com/dromosys/fork-of-fork-lightgbm-with-simple-features-cee847/code
-#lgb.grid = list(objective = "binary",
-#                metric = "auc",
-#                #n_estimators=10000,
-#                learning_rate=0.02, # in source - 0.02
-#                num_leaves=32,
-#                colsample_bytree=0.9497036,
-#                subsample=0.8715623,
-#                max_depth=8,
-#                reg_alpha=0.04,
-#                reg_lambda=0.073,
-#                min_split_gain=0.0222415,
-#                min_child_weight=40,
-#                is_unbalance = TRUE)
-
-lgb.grid = list(objective = "binary",
-                metric = "auc",
-                learning_rate=0.02, # in source - 0.02
-                num_leaves=127,
-                #colsample_bytree=0.9497036,
-                #subsample=0.8715623,
-                #max_depth=8,
-                #reg_alpha=0.04,
-                #reg_lambda=0.073,
-                #min_split_gain=0.0222415,
-                #min_child_weight=40,
-                feature_fraction = 0.8, #originaly 0.5
-                bagging_freq = 1,
-                bagging_fraction = 0.8,
-                use_missing = TRUE,
-                is_unbalance = TRUE)
-
-m_gbm_cv = lgb.train(params = lgb.grid,
-                     data = dtrain,
-                     num_threads = 10,
-                     nrounds = 5,
-                     eval_freq = 20,
-                     #boosting = 'dart', # todo: check the difference
-                     #num_leaves = 255, # typical: 255, usually {15, 31, 63, 127, 255, 511, 1023, 2047, 4095}.
-                     #eval = "binary_error", #can place own validation function here #unknown parameter
-                     #categorical_feature = categoricals.vec,
-                     num_iterations = 3000, #2000, equivalent of n_estimators
-                     early_stopping_round = 200,
-                     valids = list(train = dval),
-                     #nfold = 5, #unknown parameter
-                     #stratified = TRUE, #unknown parameter
-                     verbose = 2)
-
-#---------------------------
-read_csv(file.path(data_dir, "//Models//sample_submission.csv")) %>%  
-  mutate(SK_ID_CURR = as.integer(SK_ID_CURR),
-         TARGET = predict(m_gbm_cv, dtest)) %>%
-  write_csv(file.path(data_dir, paste0("//Models//max_cols_", round(m_gbm_cv$best_score, 5), ".csv")))
+View(lgbm_fin)
 
 # write file with characteristic parameters
 write_csv(lgb.importance(m_gbm_cv, percentage = TRUE), file.path(data_dir, paste0("//Results//max_cols_", round(m_gbm_cv$best_score, 5), "_importance.csv")))
