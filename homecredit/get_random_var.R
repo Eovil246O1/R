@@ -27,11 +27,6 @@ get_random_feature = function(dt, count_random_vars = 100) {
       i = i + 1
       k = k - runif(1, 0, 1)
     }
-    list_params
-    list_transf
-    list_const
-    list_oper
-  
     fla = ""
     i = 1
     # create formula for calculations

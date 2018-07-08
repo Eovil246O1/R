@@ -51,7 +51,6 @@ get_random_model = function(dt, count_random_vars = 100, predictor = y) {
           fla = paste0(fla, list_params[i])
         }
       }
-      fla
       list_params = unique(list_params)
       # apply model
       dt_mod = as.data.table(cbind(predictor, dt[1:length(predictor), list_params, with = FALSE]))

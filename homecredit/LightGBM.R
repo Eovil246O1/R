@@ -395,13 +395,9 @@ for (i in 1:nrow(grid_search)) {
 }
 View(perf)
 # grid_search
-perf
 cat("Model ", which.max(perf), " is max auc: ", max(perf), sep = "","\n")
 print(grid_search[which.max(perf), ])
-
 grid_search
-
-traceback()
 
 #---------------------------
 read_csv(file.path(data_dir, "//Models//sample_submission.csv")) %>%  
@@ -411,3 +407,4 @@ read_csv(file.path(data_dir, "//Models//sample_submission.csv")) %>%
 
 # write file with characteristic parameters
 write_csv(lgb.importance(m_gbm_cv, percentage = TRUE), file.path(data_dir, paste0("//Results//exp_cols_", round(m_gbm_cv$best_score, 5), "_importance.csv")))
+rm(dtest, dtrain, dval)
