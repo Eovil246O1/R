@@ -174,7 +174,7 @@ for (i in 1:5) {
   tr_te = readRDS(paste0(data_dir, "//Calculation//input_bigmatrix_long.rds"))
   load(file = paste0(data_dir, "//Calculation//input_tri.RData"), .GlobalEnv)
   load(file = paste0(data_dir, "//Calculation//input_y.RData"), .GlobalEnv)
-  
+
   #dtest <- lgb.Dataset(data = tr_te[-tri, ]) #it seems that this approach do not work for LightGBM. Raise questions for this.
   dtest <- tr_te[-tri, ]
   tr_te <- tr_te[tri, ]

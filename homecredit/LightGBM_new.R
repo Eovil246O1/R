@@ -180,18 +180,16 @@ tr_te <- tr %>%
          CAR_TO_BIRTH_RATIO = OWN_CAR_AGE / DAYS_BIRTH,
          CAR_TO_EMPLOY_RATIO = OWN_CAR_AGE / DAYS_EMPLOYED,
          PHONE_TO_BIRTH_RATIO = DAYS_LAST_PHONE_CHANGE / DAYS_BIRTH,
-         PHONE_TO_EMPLOY_RATIO = DAYS_LAST_PHONE_CHANGE / DAYS_EMPLOYED,
+         PHONE_TO_EMPLOY_RATIO = DAYS_LAST_PHONE_CHANGE / DAYS_EMPLOYED
          # add features from corr check loop
-         AMT_DRAWINGS_OTHER_CURRENT_mean + DAYS_LAST_DUE_mean, # new corr = 0.086, diff = 0.059
-         DAYS_LAST_DUE_mean + AMT_DRAWINGS_OTHER_CURRENT_sd, # new corr = 0.0856, diff = 0.0586
-         CNT_DRAWINGS_OTHER_CURRENT_mean + CNT_INSTALMENT_MATURE_CUM_mean, # new corr = -0.084, diff = 0.0555
-         AMT_PAYMENT_CURRENT_mean + DAYS_LAST_DUE_mean, # new corr = 0.08, diff = 0.05385
-         
-         AMT_CREDIT_SUM_max + RATE_INTEREST_PRIMARY_sd, # new corr = 0.31, check this carefully
-         AMT_ANNUITY_min.y + RATE_INTEREST_PRIVILEGED_sd, # new corr = 0.13, check this carefully
-         
-         RATE_INTEREST_PRIMARY_NA = if_else(is.na(RATE_INTEREST_PRIMARY_mean) | is.nan(RATE_INTEREST_PRIMARY_mean), 0, 1), #added by intuition
-         RATE_INTEREST_PRIVILEGED_NA = if_else(is.na(RATE_INTEREST_PRIVILEGED_mean) | is.nan(RATE_INTEREST_PRIVILEGED_mean), 0, 1) #added by intuition
+         #AMT_DRAWINGS_OTHER_CURRENT_mean + DAYS_LAST_DUE_mean, # new corr = 0.086, diff = 0.059 #inefficient = 3.64E-04 on real data
+         #DAYS_LAST_DUE_mean + AMT_DRAWINGS_OTHER_CURRENT_sd, # new corr = 0.0856, diff = 0.0586 #inefficient = 4E-04 on real data
+         #CNT_DRAWINGS_OTHER_CURRENT_mean + CNT_INSTALMENT_MATURE_CUM_mean, # new corr = -0.084, diff = 0.0555 #inefficient = 1.66E-04 on real data
+         #AMT_PAYMENT_CURRENT_mean + DAYS_LAST_DUE_mean, # new corr = 0.08, diff = 0.05385 #inefficient = 0.00036 on real data
+         #AMT_CREDIT_SUM_max + RATE_INTEREST_PRIMARY_sd, # new corr = 0.31, check this carefully #inefficient on real data
+         #AMT_ANNUITY_min.y + RATE_INTEREST_PRIVILEGED_sd, # new corr = 0.13, check this carefully #inefficient on real data
+         #RATE_INTEREST_PRIMARY_NA = if_else(is.na(RATE_INTEREST_PRIMARY_mean) | is.nan(RATE_INTEREST_PRIMARY_mean), 0, 1), #added by intuition #inefficient on real data
+         #RATE_INTEREST_PRIVILEGED_NA = if_else(is.na(RATE_INTEREST_PRIVILEGED_mean) | is.nan(RATE_INTEREST_PRIVILEGED_mean), 0, 1) #added by intuition #inefficient on real data
          ) %>%
   select(-one_of(drop_cols))
 
@@ -329,77 +327,94 @@ gc()
 #---------------------------
 cat("Save & load long dataset...\n")
 saveRDS(tr_te, file = paste0(data_dir, "//Calculation//input_bigmatrix_long.rds"))
-#readRDS(paste0(data_dir, "//Calculation//input_bigmatrix_long.rds"))
 
 #---------------------------
+lgbm_feat = data.table(Feature = character(), Gain = numeric(), Cover = numeric(), Frequency = numeric())
+lgbm_pred_list = list()
 cat("Preparing data...\n")
-#dtest <- lgb.Dataset(data = tr_te[-tri, ]) #it seems that this approach do not work for LightGBM. Raise questions for this.
-dtest <- tr_te[-tri, ]
-tr_te <- tr_te[tri, ]
-tri <- caret::createDataPartition(y, p = 0.9, list = F) %>% c()
+for (i in 1:5) {
+  tr_te = readRDS(paste0(data_dir, "//Calculation//input_bigmatrix_long.rds"))
+  load(file = paste0(data_dir, "//Calculation//input_tri.RData"), .GlobalEnv)
+  load(file = paste0(data_dir, "//Calculation//input_y.RData"), .GlobalEnv)
+  
+  #dtest <- lgb.Dataset(data = tr_te[-tri, ]) #it seems that this approach do not work for LightGBM. Raise questions for this.
+  dtest <- tr_te[-tri, ]
+  tr_te <- tr_te[tri, ]
+  tri <- caret::createDataPartition(y, p = 0.9, list = F) %>% c()
+  
+  dtrain = lgb.Dataset(data = tr_te[tri, ], label = y[tri])
+  dval = lgb.Dataset(data = tr_te[-tri, ], label = y[-tri])
+  cols <- colnames(tr_te)
+  
+  rm(tr_te, y, tri); gc()
+  
+  #---------------------------
+  cat("Training model...\n")
+  
+  # parameters taken from https://www.kaggle.com/dromosys/fork-of-fork-lightgbm-with-simple-features-cee847/code
+  #lgb.grid = list(objective = "binary",
+  #                metric = "auc",
+  #                #n_estimators=10000,
+  #                learning_rate=0.02, # in source - 0.02
+  #                num_leaves=32,
+  #                colsample_bytree=0.9497036,
+  #                subsample=0.8715623,
+  #                max_depth=8,
+  #                reg_alpha=0.04,
+  #                reg_lambda=0.073,
+  #                min_split_gain=0.0222415,
+  #                min_child_weight=40,
+  #                is_unbalance = TRUE)
+  
+  lgb.grid = list(objective = "binary",
+                  metric = "auc",
+                  learning_rate=0.02, # in source - 0.02
+                  num_leaves=127,
+                  #colsample_bytree=0.9497036,
+                  #subsample=0.8715623,
+                  #max_depth=8,
+                  #reg_alpha=0.04,
+                  #reg_lambda=0.073,
+                  #min_split_gain=0.0222415,
+                  #min_child_weight=40,
+                  feature_fraction = 0.6, #originaly 0.5
+                  bagging_freq = 1,
+                  bagging_fraction = 0.8,
+                  use_missing = TRUE,
+                  is_unbalance = TRUE)
+  
+  m_gbm_cv = lgb.train(params = lgb.grid,
+                       data = dtrain,
+                       num_threads = 10,
+                       nrounds = 5,
+                       eval_freq = 20,
+                       #boosting = 'dart', # todo: check the difference
+                       #num_leaves = 255, # typical: 255, usually {15, 31, 63, 127, 255, 511, 1023, 2047, 4095}.
+                       #eval = "binary_error", #can place own validation function here #unknown parameter
+                       #categorical_feature = categoricals.vec,
+                       num_iterations = 2000, #2000, equivalent of n_estimators
+                       early_stopping_round = 200,
+                       valids = list(train = dval),
+                       #nfold = 5, #unknown parameter
+                       #stratified = TRUE, #unknown parameter
+                       verbose = 2)
+  lgbm_pred_list[[i]] = predict(m_gbm_cv, dtest)
+  lgbm_feat = rbindlist(list(lgbm_feat, lgb.importance(m_gbm_cv, percentage = TRUE)))
+}
 
-dtrain = lgb.Dataset(data = tr_te[tri, ], label = y[tri])
-dval = lgb.Dataset(data = tr_te[-tri, ], label = y[-tri])
-cols <- colnames(tr_te)
+avg_lgbm = Reduce(`+`, lgbm_pred_list)
+avg_lgbm = avg_lgbm/i
 
-rm(tr_te, y, tri); gc()
-
-#---------------------------
-cat("Training model...\n")
-
-# parameters taken from https://www.kaggle.com/dromosys/fork-of-fork-lightgbm-with-simple-features-cee847/code
-#lgb.grid = list(objective = "binary",
-#                metric = "auc",
-#                #n_estimators=10000,
-#                learning_rate=0.02, # in source - 0.02
-#                num_leaves=32,
-#                colsample_bytree=0.9497036,
-#                subsample=0.8715623,
-#                max_depth=8,
-#                reg_alpha=0.04,
-#                reg_lambda=0.073,
-#                min_split_gain=0.0222415,
-#                min_child_weight=40,
-#                is_unbalance = TRUE)
-
-lgb.grid = list(objective = "binary",
-                metric = "auc",
-                learning_rate=0.02, # in source - 0.02
-                num_leaves=127,
-                #colsample_bytree=0.9497036,
-                #subsample=0.8715623,
-                #max_depth=8,
-                #reg_alpha=0.04,
-                #reg_lambda=0.073,
-                #min_split_gain=0.0222415,
-                #min_child_weight=40,
-                feature_fraction = 0.8, #originaly 0.5
-                bagging_freq = 1,
-                bagging_fraction = 0.8,
-                use_missing = TRUE,
-                is_unbalance = TRUE)
-
-m_gbm_cv = lgb.train(params = lgb.grid,
-                     data = dtrain,
-                     num_threads = 10,
-                     nrounds = 5,
-                     eval_freq = 20,
-                     #boosting = 'dart', # todo: check the difference
-                     #num_leaves = 255, # typical: 255, usually {15, 31, 63, 127, 255, 511, 1023, 2047, 4095}.
-                     #eval = "binary_error", #can place own validation function here #unknown parameter
-                     #categorical_feature = categoricals.vec,
-                     num_iterations = 3000, #2000, equivalent of n_estimators
-                     early_stopping_round = 200,
-                     valids = list(train = dval),
-                     #nfold = 5, #unknown parameter
-                     #stratified = TRUE, #unknown parameter
-                     verbose = 2)
+lgbm_feat_avg = lgbm_feat %>% group_by(Feature) %>%
+                  summarize(gain_avg = mean(Gain),
+                            cover_avg = mean(Cover),
+                            frequency_avg = mean(Frequency))
 
 #---------------------------
 read_csv(file.path(data_dir, "//Models//sample_submission.csv")) %>%  
   mutate(SK_ID_CURR = as.integer(SK_ID_CURR),
-         TARGET = predict(m_gbm_cv, dtest)) %>%
-  write_csv(file.path(data_dir, paste0("//Models//max_cols_", round(m_gbm_cv$best_score, 5), ".csv")))
+         TARGET = avg_lgbm) %>%
+  write_csv(file.path(data_dir, paste0("//Models//new_mod_rand_cols", round(m_gbm_cv$best_score, 5), ".csv")))
 
 # write file with characteristic parameters
-write_csv(lgb.importance(m_gbm_cv, percentage = TRUE), file.path(data_dir, paste0("//Results//max_cols_", round(m_gbm_cv$best_score, 5), "_importance.csv")))
+write_csv(lgbm_feat_avg, file.path(data_dir, paste0("//Results//new_mod_", round(m_gbm_cv$best_score, 5), "_importance.csv")))
