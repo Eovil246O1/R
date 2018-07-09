@@ -10,7 +10,7 @@ set.seed(0)
 #---------------------------
 cat("Loading data...\n")
 
-data_dir = "C:\\Users\\Eovil\\Desktop\\Kaggle_Homecredit competition"
+data_dir = "C:\\Users\\Viacheslav_Pyrohov\\Desktop\\Kaggle_Homecredit competition"
 
 tr <- read_csv(file.path(data_dir, "application_train.csv"))
 te <- read_csv(file.path(data_dir, "application_test.csv"))
@@ -182,16 +182,16 @@ tr_te <- tr %>%
          PHONE_TO_BIRTH_RATIO = DAYS_LAST_PHONE_CHANGE / DAYS_BIRTH,
          PHONE_TO_EMPLOY_RATIO = DAYS_LAST_PHONE_CHANGE / DAYS_EMPLOYED,
          # add features from corr check loop
-         AMT_DRAWINGS_OTHER_CURRENT_avg + DAYS_LAST_DUE_avg, # new corr = 0.086, diff = 0.059
-         DAYS_LAST_DUE_avg + AMT_DRAWINGS_OTHER_CURRENT_sd, # new corr = 0.0856, diff = 0.0586
-         CNT_DRAWINGS_OTHER_CURRENT_avg + CNT_INSTALMENT_MATURE_CUM_avg, # new corr = -0.084, diff = 0.0555
-         AMT_PAYMENT_CURRENT_avg + DAYS_LAST_DUE_avg, # new corr = 0.08, diff = 0.05385
+         AMT_DRAWINGS_OTHER_CURRENT_mean + DAYS_LAST_DUE_mean, # new corr = 0.086, diff = 0.059
+         DAYS_LAST_DUE_mean + AMT_DRAWINGS_OTHER_CURRENT_sd, # new corr = 0.0856, diff = 0.0586
+         CNT_DRAWINGS_OTHER_CURRENT_mean + CNT_INSTALMENT_MATURE_CUM_mean, # new corr = -0.084, diff = 0.0555
+         AMT_PAYMENT_CURRENT_mean + DAYS_LAST_DUE_mean, # new corr = 0.08, diff = 0.05385
          
          AMT_CREDIT_SUM_max + RATE_INTEREST_PRIMARY_sd, # new corr = 0.31, check this carefully
          AMT_ANNUITY_min.y + RATE_INTEREST_PRIVILEGED_sd, # new corr = 0.13, check this carefully
          
-         RATE_INTEREST_PRIMARY_NA = if_else(is.na(RATE_INTEREST_PRIMARY_avg) | is.nan(RATE_INTEREST_PRIMARY_avg), 0, 1), #added by intuition
-         RATE_INTEREST_PRIVILEGED_NA = if_else(is.na(RATE_INTEREST_PRIVILEGED_avg) | is.nan(RATE_INTEREST_PRIVILEGED_avg), 0, 1) #added by intuition
+         RATE_INTEREST_PRIMARY_NA = if_else(is.na(RATE_INTEREST_PRIMARY_mean) | is.nan(RATE_INTEREST_PRIMARY_mean), 0, 1), #added by intuition
+         RATE_INTEREST_PRIVILEGED_NA = if_else(is.na(RATE_INTEREST_PRIVILEGED_mean) | is.nan(RATE_INTEREST_PRIVILEGED_mean), 0, 1) #added by intuition
          ) %>%
   select(-one_of(drop_cols))
 
@@ -266,9 +266,9 @@ vect_fla = c('y ~ CNT_PAYMENT_max + NAME_CONTRACT_STATUS_sum.y',
 list_params = list(c('CNT_PAYMENT_max', 'NAME_CONTRACT_STATUS_sum.y'), 
                    c('REGION_RATING_CLIENT_W_CITY', 'AMT_APPLICATION_mean'),
                    c('DPD_n_distinct', 'LIVE_REGION_NOT_WORK_REGION', 'NAME_EDUCATION_TYPE'),
-                   c('newcol_DAYS_INSTALMENT_min', 'NAME_INCOME_TYPE', 'CODE_REJECT_REASON_min'),
-                   c('newcol_FLAG_DOCUMENT_7', 'DAYS_ENTRY_PAYMENT_sd', 'FLAG_DOCUMENT_3'),
-                   c('newcol_CREDIT_ACTIVE_BOOL_sum', 'DAYS_CREDIT_mean')
+                   c('DAYS_INSTALMENT_min', 'NAME_INCOME_TYPE', 'CODE_REJECT_REASON_min'),
+                   c('FLAG_DOCUMENT_7', 'DAYS_ENTRY_PAYMENT_sd', 'FLAG_DOCUMENT_3'),
+                   c('CREDIT_ACTIVE_BOOL_sum', 'DAYS_CREDIT_mean')
                    )
 for (i in 1:length(vect_fla)) {
   fla = vect_fla[i]
