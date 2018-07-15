@@ -414,7 +414,7 @@ lgbm_feat_avg = lgbm_feat %>% group_by(Feature) %>%
 read_csv(file.path(data_dir, "//Models//sample_submission.csv")) %>%  
   mutate(SK_ID_CURR = as.integer(SK_ID_CURR),
          TARGET = avg_lgbm) %>%
-  write_csv(file.path(data_dir, paste0("//Models//new_mod_rand_cols", round(m_gbm_cv$best_score, 5), ".csv")))
+  write_csv(file.path(data_dir, paste0("//Models//new_mod_", round(m_gbm_cv$best_score, 5), ".csv")))
 
 # write file with characteristic parameters
 write_csv(lgbm_feat_avg, file.path(data_dir, paste0("//Results//new_mod_", round(m_gbm_cv$best_score, 5), "_importance.csv")))

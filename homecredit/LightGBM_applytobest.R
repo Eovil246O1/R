@@ -43,6 +43,8 @@ sum_bureau <- bureau %>%
 
 rm(bureau, sum_bbalance); gc()
 
+drop_cols_bureau = colnames(sum_bureau)
+
 #---------------------------
 cat("Preprocessing credit_card_balance.csv...\n")
 cc_balance <- read_csv(file.path(data_dir, "credit_card_balance.csv"))
@@ -103,6 +105,14 @@ rm(prev); gc()
 
 tri <- 1:nrow(tr)
 y <- tr$TARGET
+
+#empt_sum_prev <- te %>% 
+#  anti_join(sum_prev, by = "SK_ID_CURR")
+
+empt_sum_bureau <- te %>% 
+  anti_join(sum_bureau, by = "SK_ID_CURR") %>%
+  select(SK_ID_CURR) %>%
+  mutate(IsEmptBureau = 1)
 
 tr_te <- tr %>% 
   select(-TARGET) %>% 
@@ -168,6 +178,7 @@ saveRDS(tr_te, file = paste0(data_dir, "//Calculation//input_bigmatrix_long.rds"
 #---------------------------
 lgbm_feat = data.table(Feature = character(), Gain = numeric(), Cover = numeric(), Frequency = numeric())
 lgbm_pred_list = list()
+lgbm_pred_empt_list = list()
 lgbm_score = vector()
 cat("Preparing data...\n")
 for (i in 1:5) {
@@ -215,19 +226,63 @@ for (i in 1:5) {
                        #num_leaves = 255, # typical: 255, usually {15, 31, 63, 127, 255, 511, 1023, 2047, 4095}.
                        #eval = "binary_error", #can place own validation function here #unknown parameter
                        #categorical_feature = categoricals.vec,
+                       num_iterations = 10, #2000, equivalent of n_estimators
+                       early_stopping_round = 200,
+                       valids = list(train = dval),
+                       #nfold = 5, #unknown parameter
+                       #stratified = TRUE, #unknown parameter
+                       verbose = 2)
+  
+  lgbm_pred_list[[i]] = rank(predict(m_gbm_cv, dtest), ties.method = 'first')
+  
+  #---------------------------
+  cat("Training model for empty vars...\n")
+  
+  tr_te = readRDS(paste0(data_dir, "//Calculation//input_bigmatrix_long.rds"))
+  load(file = paste0(data_dir, "//Calculation//input_tri.RData"), .GlobalEnv)
+  load(file = paste0(data_dir, "//Calculation//input_y.RData"), .GlobalEnv)
+  
+  tr_te = tr_te[,!colnames(tr_te) %in% drop_cols_bureau]
+  
+  dtest <- tr_te[-tri, ]
+  tr_te <- tr_te[tri, ]
+  tri <- caret::createDataPartition(y, p = 0.9, list = F) %>% c()
+  
+  dtrain = lgb.Dataset(data = tr_te[tri, ], label = y[tri])
+  dval = lgb.Dataset(data = tr_te[-tri, ], label = y[-tri])
+  cols <- colnames(tr_te)
+  
+  rm(tr_te, y, tri); gc()
+  
+  m_lgbm_empt = lgb.train(params = lgb.grid,
+                       data = dtrain,
+                       num_threads = 10,
+                       nrounds = 5,
+                       eval_freq = 20,
+                       #boosting = 'dart', # todo: check the difference
+                       #num_leaves = 255, # typical: 255, usually {15, 31, 63, 127, 255, 511, 1023, 2047, 4095}.
+                       #eval = "binary_error", #can place own validation function here #unknown parameter
+                       #categorical_feature = categoricals.vec,
                        num_iterations = 3000, #2000, equivalent of n_estimators
                        early_stopping_round = 200,
                        valids = list(train = dval),
                        #nfold = 5, #unknown parameter
                        #stratified = TRUE, #unknown parameter
                        verbose = 2)
-  lgbm_pred_list[[i]] = predict(m_gbm_cv, dtest)
+  
+  lgbm_pred_empt_list[[i]] = rank(predict(m_lgbm_empt, dtest), ties.method = 'first')
+  
   lgbm_feat = rbindlist(list(lgbm_feat, lgb.importance(m_gbm_cv, percentage = TRUE)))
   lgbm_score[i] = m_gbm_cv$best_score
 }
 
 avg_lgbm = Reduce(`+`, lgbm_pred_list)
 avg_lgbm = avg_lgbm/i
+avg_lgbm = avg_lgbm/max(avg_lgbm)
+
+avg_lgbm_empt = Reduce(`+`, lgbm_pred_empt_list)
+avg_lgbm_empt = avg_lgbm_empt/i
+avg_lgbm_empt = avg_lgbm_empt/max(avg_lgbm_empt)
 
 lgbm_feat_avg = lgbm_feat %>% group_by(Feature) %>%
   summarize(gain_avg = mean(Gain),
@@ -236,10 +291,15 @@ lgbm_feat_avg = lgbm_feat %>% group_by(Feature) %>%
 lgbm_score_avg = mean(lgbm_score)
 
 #---------------------------
-read_csv(file.path(data_dir, "//Models//sample_submission.csv")) %>%  
+
+read_csv(file.path(data_dir, "//Models//sample_submission.csv")) %>%
+  left_join(empt_sum_bureau, by = "SK_ID_CURR") %>%
   mutate(SK_ID_CURR = as.integer(SK_ID_CURR),
-         TARGET = avg_lgbm) %>%
-  write_csv(file.path(data_dir, paste0("//Models//new_mod_", round(lgbm_score_avg, 5), ".csv")))
+         TARGET_ORD = avg_lgbm,
+         TARGET_EMPT = avg_lgbm_empt,
+         TARGET = if_else(is.na(IsEmptBureau), TARGET_ORD, TARGET_EMPT)) %>%
+  #select(-c(IsEmptBureau)) %>%
+  write_csv(file.path(data_dir, paste0("//Models//new_mod_fix_", round(lgbm_score_avg, 5), ".csv")))
 
 # write file with characteristic parameters
 write_csv(lgbm_feat_avg, file.path(data_dir, paste0("//Results//new_mod_", round(lgbm_score_avg, 5), "_importance.csv")))

@@ -1,3 +1,4 @@
+library(smbinning)
 library(magrittr)
 library(lightgbm)
 library(moments)
@@ -174,17 +175,42 @@ for (i in 1:5) {
   tr_te = readRDS(paste0(data_dir, "//Calculation//input_bigmatrix_long.rds"))
   load(file = paste0(data_dir, "//Calculation//input_tri.RData"), .GlobalEnv)
   load(file = paste0(data_dir, "//Calculation//input_y.RData"), .GlobalEnv)
-  
+
   #dtest <- lgb.Dataset(data = tr_te[-tri, ]) #it seems that this approach do not work for LightGBM. Raise questions for this.
   dtest <- tr_te[-tri, ]
   tr_te <- tr_te[tri, ]
-  tri <- caret::createDataPartition(y, p = 0.9, list = F) %>% c()
   
+  #-----------------------------
+  cat("Create validation sample...\n")
+  df_test = data.table(tr_te[,c('EXT_SOURCE_1', 'EXT_SOURCE_2', 'EXT_SOURCE_3')], y, id = 1:nrow(tr_te))
+  
+  df_bin = smbinning(df_test, y = 'y', x = 'EXT_SOURCE_1', p = .1)
+  df_test = smbinning.gen(df_test, df_bin, chrname = 'EXT_SOURCE_1_BIN')
+  
+  df_bin = smbinning(df_test, y = 'y', x = 'EXT_SOURCE_2', p = .1)
+  df_test = smbinning.gen(df_test, df_bin, chrname = 'EXT_SOURCE_2_BIN')
+  
+  df_bin = smbinning(df_test, y = 'y', x = 'EXT_SOURCE_3', p = .1)
+  df_test = smbinning.gen(df_test, df_bin, chrname = 'EXT_SOURCE_3_BIN')
+  
+  df_test[is.na(EXT_SOURCE_2), 
+          `:=` (EXT_SOURCE_1_BIN = 'EXT_SOURCE_2_NA', 
+                EXT_SOURCE_2_BIN = 'EXT_SOURCE_2_NA', 
+                EXT_SOURCE_3_BIN = 'EXT_SOURCE_2_NA')]
+  df_test = df_test[,.(EXT_SOURCE_1_BIN, EXT_SOURCE_2_BIN, EXT_SOURCE_3_BIN, y, id)]
+
+  df_fin <- df_test %>%
+    group_by(EXT_SOURCE_1_BIN, EXT_SOURCE_2_BIN, EXT_SOURCE_3_BIN, y) %>%
+    sample_frac(., 0.9)
+  
+  tri = df_fin$id
+  #tri <- caret::createDataPartition(as.factor(y), p = 0.9, list = F) %>% c()
+
   dtrain = lgb.Dataset(data = tr_te[tri, ], label = y[tri])
   dval = lgb.Dataset(data = tr_te[-tri, ], label = y[-tri])
   cols <- colnames(tr_te)
   
-  rm(tr_te, y, tri); gc()
+  rm(tr_te, y, tri, df_bin, df_test); gc()
   
   #---------------------------
   cat("Training model...\n")

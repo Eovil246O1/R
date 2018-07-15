@@ -299,7 +299,7 @@ saveRDS(tr_te, file = paste0(data_dir, "//Calculation//input_bigmatrix_long.rds"
 
 # apply cycle to calculate new variables
 lgbm_fin = data.frame()
-for (i in 1:20) {
+for (i in 1:50) {
   cat(paste0("Start building model ???", i, "...\n"))
   
   load(file = paste0(data_dir, "//Calculation//input_bigmatrix_short.RData"), .GlobalEnv)
@@ -403,4 +403,4 @@ for (i in 1:20) {
 View(lgbm_fin)
 
 # write file with characteristic parameters
-write_csv(lgb.importance(m_gbm_cv, percentage = TRUE), file.path(data_dir, paste0("//Results//max_cols_", round(m_gbm_cv$best_score, 5), "_importance.csv")))
+write_csv(lgbm_fin, file.path(data_dir, paste0("//Results//rand_mod_importance_100iter.csv")))
