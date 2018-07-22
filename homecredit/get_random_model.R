@@ -36,7 +36,7 @@ get_random_model = function(dt, count_random_vars = 100, predictor = y) {
       list_transf
       #list_const
       #list_oper
-      fla = "predictor ~ "
+      fla = "predictor ~ 0 + "
       i = 1
       # create formula for calculations
       for (i in 1:length(list_params)) {
@@ -54,8 +54,8 @@ get_random_model = function(dt, count_random_vars = 100, predictor = y) {
       list_params = unique(list_params)
       # apply model
       dt_mod = as.data.table(cbind(predictor, dt[1:length(predictor), list_params, with = FALSE]))
-      mod = lm(data=dt_mod, formula=as.formula(fla)) #to do: add random model here
-      dt[, paste0('newcol','_', sub('predictor ~ ', '', fla)) := predict(mod, dt[, list_params, with = FALSE])]
+      mod = glm(data=dt_mod, formula=as.formula(fla)) #to do: add random model here
+      dt[, paste0('newcol','_', sub('predictor ~ 0 \\+ ', '', fla)) := predict.glm(mod, dt[, list_params, with = FALSE], na.action = na.pass)]
       # to do: add coefficient description here
     }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
   }

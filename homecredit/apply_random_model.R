@@ -10,7 +10,7 @@ library(sqldf)
 #---------------------------
 cat("Loading data...\n")
 
-data_dir = "C:\\Users\\Viacheslav_Pyrohov\\Desktop\\Kaggle_Homecredit competition"
+data_dir = "C:\\Users\\Eovil\\Desktop\\Kaggle_Homecredit competition"
 
 tr <- read_csv(file.path(data_dir, "application_train.csv"))
 te <- read_csv(file.path(data_dir, "application_test.csv"))
@@ -213,94 +213,94 @@ save(y, file = paste0(data_dir, "//Calculation//input_y.RData"), version = NULL)
 #load(file = paste0(data_dir, "//Calculation//input_y.RData"), .GlobalEnv)
 gc()
 #---------------------------
-cat("Create additional variables...\n")
-tr_te = as.data.table(tr_te); gc()
-
-# create vars for NaN observations
-# CONCLUSION: NAs already treated by na feature which is enough predicatiove
-#col_num = ncol(tr_te)
-#for (i in 3:col_num) {
-#  colname = names(tr_te)[i]
-#  tr_te[is.na(eval(as.name(colname)))|is.nan(eval(as.name(colname)))|is.null(eval(as.name(colname)))|is.infinite(eval(as.name(colname))), 
-#        paste0(colname, '_nulls') := 1]
-#  #tr_te[is.na(eval(as.name(paste0(colname, '_nulls')))), paste0(colname, '_nulls') := 0]
-#}
-
-# outliers marking
-outliers_remove = function(dt,col_from,col_to) {
-  for (i in col_from:col_to) {
-    colname = names(dt)[i]
-    qnt <- quantile(dt[,eval(as.name(colname))], probs=c(.25, .75), na.rm = T)
-    H <- 1.5 * (qnt[2]-qnt[1])
-    dt[eval(as.name(colname)) < (qnt[1] - H), paste0(colname, '_outliers') := -1]
-    dt[eval(as.name(colname)) > (qnt[2] + H), paste0(colname, '_outliers') := 1]
-    #dt[is.na(eval(as.name(paste0(colname, '_outliers')))), paste0(colname, '_outliers') := 0]
-  }
-  return(as.data.table(dt))
-}
-
-tr_te = outliers_remove(tr_te, col_from = 3, col_to = col_num)
-gc()
-
-# create matrix from dt without RAM issues
-# original article with the method could be found here:
-# https://medium.com/data-design/loading-super-large-sparse-data-when-you-cant-load-as-sparse-in-r-2a9f0ad927b2
-temp_names = colnames(tr_te)
-write_csv(as.data.frame(temp_names), path = paste0(data_dir, "//Calculation//input_colnames.csv"), col_names = TRUE)
-write_csv(tr_te, path = paste0(data_dir, "//Calculation//input_bigmatrix.csv"), col_names = TRUE)
-
-temp_names = read.csv(file = paste0(data_dir, "//Calculation//input_colnames.csv"))
-rm(tr_te); gc()
-
-n = 10 #set number of parts to split
-for (i in 1:n) {
-  cat("Loading ", i, "th part.\n", sep = "")
-  train_data_temp <- fread(input = paste0(data_dir, "//Calculation//input_bigmatrix.csv"),
-                           select = (1+round((i-1)*nrow(temp_names)/n, 0)):round(i*nrow(temp_names)/n, 0),
-                           header = TRUE,
-                           sep = ",",
-                           stringsAsFactors = FALSE,
-                           colClasses = rep("numeric", nrow(temp_names)),
-                           data.table = TRUE)
-  
-  gc(verbose = FALSE)
-  if (i > 1) {
-    cat("Coercing to matrix.\n", sep = "")
-    tr_te_temp <- as.matrix(train_data_temp)
-    rm(train_data_temp)
-    gc(verbose = FALSE)
-    cat("Coercing into dgCMatrix with NA as blank.\n", sep = "")
-    tr_te_temp <- dropNA(tr_te_temp)
-    gc(verbose = FALSE)
-    cat("Column binding the full matrix with the newly created matrix.\n", sep = "")
-    tr_te <- cbind(tr_te, tr_te_temp)
-    rm(tr_te_temp)
-    gc(verbose = FALSE)
-  } else {
-    cat("Coercing to matrix.\n", sep = "")
-    tr_te_temp <- as.matrix(train_data_temp)
-    rm(train_data_temp)
-    gc(verbose = FALSE)
-    cat("Coercing into dgCMatrix with NA as blank.\n", sep = "")
-    tr_te <- dropNA(tr_te_temp)
-    gc(verbose = FALSE)
-  }
-}
-gc()
-
-#matr_scan = scan(file = paste0(data_dir, "//Calculation//input_bigmatrix.csv"), sep = ',')
-#tr_te = matrix(matr_scan, ncol = length(temp_names$temp_names), byrow = TRUE, dimnames = list(NULL, temp_names$temp_names))
-#rm(matr_scan, temp_names); gc()
-
-#---------------------------
-cat("Save & load long dataset...\n")
-saveRDS(tr_te, file = paste0(data_dir, "//Calculation//input_bigmatrix_long.rds"))
-#readRDS(paste0(data_dir, "//Calculation//input_bigmatrix_long.rds"))
+# cat("Create additional variables...\n")
+# tr_te = as.data.table(tr_te); gc()
+# 
+# # create vars for NaN observations
+# # CONCLUSION: NAs already treated by na feature which is enough predicatiove
+# #col_num = ncol(tr_te)
+# #for (i in 3:col_num) {
+# #  colname = names(tr_te)[i]
+# #  tr_te[is.na(eval(as.name(colname)))|is.nan(eval(as.name(colname)))|is.null(eval(as.name(colname)))|is.infinite(eval(as.name(colname))), 
+# #        paste0(colname, '_nulls') := 1]
+# #  #tr_te[is.na(eval(as.name(paste0(colname, '_nulls')))), paste0(colname, '_nulls') := 0]
+# #}
+# 
+# # outliers marking
+# outliers_remove = function(dt,col_from,col_to) {
+#   for (i in col_from:col_to) {
+#     colname = names(dt)[i]
+#     qnt <- quantile(dt[,eval(as.name(colname))], probs=c(.25, .75), na.rm = T)
+#     H <- 1.5 * (qnt[2]-qnt[1])
+#     dt[eval(as.name(colname)) < (qnt[1] - H), paste0(colname, '_outliers') := -1]
+#     dt[eval(as.name(colname)) > (qnt[2] + H), paste0(colname, '_outliers') := 1]
+#     #dt[is.na(eval(as.name(paste0(colname, '_outliers')))), paste0(colname, '_outliers') := 0]
+#   }
+#   return(as.data.table(dt))
+# }
+# 
+# tr_te = outliers_remove(tr_te, col_from = 3, col_to = col_num)
+# gc()
+# 
+# # create matrix from dt without RAM issues
+# # original article with the method could be found here:
+# # https://medium.com/data-design/loading-super-large-sparse-data-when-you-cant-load-as-sparse-in-r-2a9f0ad927b2
+# temp_names = colnames(tr_te)
+# write_csv(as.data.frame(temp_names), path = paste0(data_dir, "//Calculation//input_colnames.csv"), col_names = TRUE)
+# write_csv(tr_te, path = paste0(data_dir, "//Calculation//input_bigmatrix.csv"), col_names = TRUE)
+# 
+# temp_names = read.csv(file = paste0(data_dir, "//Calculation//input_colnames.csv"))
+# rm(tr_te); gc()
+# 
+# n = 10 #set number of parts to split
+# for (i in 1:n) {
+#   cat("Loading ", i, "th part.\n", sep = "")
+#   train_data_temp <- fread(input = paste0(data_dir, "//Calculation//input_bigmatrix.csv"),
+#                            select = (1+round((i-1)*nrow(temp_names)/n, 0)):round(i*nrow(temp_names)/n, 0),
+#                            header = TRUE,
+#                            sep = ",",
+#                            stringsAsFactors = FALSE,
+#                            colClasses = rep("numeric", nrow(temp_names)),
+#                            data.table = TRUE)
+#   
+#   gc(verbose = FALSE)
+#   if (i > 1) {
+#     cat("Coercing to matrix.\n", sep = "")
+#     tr_te_temp <- as.matrix(train_data_temp)
+#     rm(train_data_temp)
+#     gc(verbose = FALSE)
+#     cat("Coercing into dgCMatrix with NA as blank.\n", sep = "")
+#     tr_te_temp <- dropNA(tr_te_temp)
+#     gc(verbose = FALSE)
+#     cat("Column binding the full matrix with the newly created matrix.\n", sep = "")
+#     tr_te <- cbind(tr_te, tr_te_temp)
+#     rm(tr_te_temp)
+#     gc(verbose = FALSE)
+#   } else {
+#     cat("Coercing to matrix.\n", sep = "")
+#     tr_te_temp <- as.matrix(train_data_temp)
+#     rm(train_data_temp)
+#     gc(verbose = FALSE)
+#     cat("Coercing into dgCMatrix with NA as blank.\n", sep = "")
+#     tr_te <- dropNA(tr_te_temp)
+#     gc(verbose = FALSE)
+#   }
+# }
+# gc()
+# 
+# #matr_scan = scan(file = paste0(data_dir, "//Calculation//input_bigmatrix.csv"), sep = ',')
+# #tr_te = matrix(matr_scan, ncol = length(temp_names$temp_names), byrow = TRUE, dimnames = list(NULL, temp_names$temp_names))
+# #rm(matr_scan, temp_names); gc()
+# 
+# #---------------------------
+# cat("Save & load long dataset...\n")
+# saveRDS(tr_te, file = paste0(data_dir, "//Calculation//input_bigmatrix_long.rds"))
+# #readRDS(paste0(data_dir, "//Calculation//input_bigmatrix_long.rds"))
 
 # apply cycle to calculate new variables
 lgbm_fin = data.frame()
 for (i in 1:50) {
-  cat(paste0("Start building model ???", i, "...\n"))
+  cat(paste0("Start building model #", i, "...\n"))
   
   load(file = paste0(data_dir, "//Calculation//input_bigmatrix_short.RData"), .GlobalEnv)
   load(file = paste0(data_dir, "//Calculation//input_tri.RData"), .GlobalEnv)
