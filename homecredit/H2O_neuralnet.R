@@ -232,7 +232,7 @@ for (i in 1:5) {
   # will train a regression model instead of multiclass classification.
   dtrain[,y] <- as.factor(dtrain[,y])
   dval[,y] <- as.factor(dval[,y])
-  
+  nrow(dtrain)
   # initial model. This one works
    dl_fit2 <- h2o.deeplearning(x = x,
                                y = y,
@@ -240,7 +240,9 @@ for (i in 1:5) {
                                validation_frame = dval, #this is new row
                                model_id = "dl_fit2",
                                epochs = 1000,
-                               hidden = c(100, 50, 50),
+                               activation = "TanhWithDropout", #c("Tanh", "TanhWithDropout", "Rectifier", "RectifierWithDropout", "Maxout", "MaxoutWithDropout"), 
+                               hidden = c(100, 100),
+                               hidden_dropout_ratios = c(0.05, 0.05), 
                                score_training_samples = 0, #0 for all #this is new row
                                score_validation_samples = 0, #this is new row
                                stopping_rounds = 20, # 0 = disable early stopping #metric for stoping rounds evaluated after scoring iterations, which connected to iterations of training
@@ -250,8 +252,8 @@ for (i in 1:5) {
   
    h2o.auc(dl_fit2)
    summary(dl_fit2)
-   h2o.varimp(dl_fit2)
-   h2o.gainsLift(dl_fit2, valid= T)
+   View(h2o.varimp(dl_fit2))
+   View(h2o.gainsLift(dl_fit2, valid= T))
    
   nn_model <- h2o.deeplearning( x = x, 
                                 y = y, 

@@ -1,11 +1,12 @@
 library(magrittr)
-library(lightgbm)
 library(moments)
 library(data.table)
 library(recommenderlab)
 library(tidyverse)
+library(lightgbm)
+library(smbinning)
 
-set.seed(0)
+#set.seed(0)
 
 #---------------------------
 cat("Loading data...\n")
@@ -103,17 +104,23 @@ sum_prev <- prev %>%
   summarise_all(fn) 
 rm(prev); gc()
 
+drop_cols_prev = colnames(sum_prev)
+
 tri <- 1:nrow(tr)
 y <- tr$TARGET
 
-#empt_sum_prev <- te %>% 
-#  anti_join(sum_prev, by = "SK_ID_CURR")
-
+# part for empty entities
 empt_sum_bureau <- te %>% 
   anti_join(sum_bureau, by = "SK_ID_CURR") %>%
   select(SK_ID_CURR) %>%
   mutate(IsEmptBureau = 1)
 
+empt_sum_prev <- te %>% 
+ anti_join(sum_prev, by = "SK_ID_CURR") %>%
+ select(SK_ID_CURR) %>%
+ mutate(IsEmptPrev = 1)
+
+# create final dataset
 tr_te <- tr %>% 
   select(-TARGET) %>% 
   bind_rows(te) %>%
@@ -154,7 +161,8 @@ tr_te %<>%
   mutate(DOC_IND_KURT = apply(tr_te[, docs], 1, moments::kurtosis),
          LIVE_IND_SUM = apply(tr_te[, live], 1, sum),
          NEW_INC_BY_ORG = dplyr::recode(tr_te$ORGANIZATION_TYPE, !!!inc_by_org),
-         NEW_EXT_SOURCES_MEAN = apply(tr_te[, c("EXT_SOURCE_1", "EXT_SOURCE_2", "EXT_SOURCE_3")], 1, mean, na.rm = TRUE),
+         NEW_EXT_SOURCES_MEAN = apply(tr_te[, c("EXT_SOURCE_1", "EXT_SOURCE_2", "EXT_SOURCE_3")], 1, mean),
+         NEW_EXT_SOURCES_MEAN = apply(tr_te[, c("EXT_SOURCE_1", "EXT_SOURCE_2", "EXT_SOURCE_3")], 1, min, na.rm = TRUE), #new parameter
          NEW_SCORES_STD = apply(tr_te[, c("EXT_SOURCE_1", "EXT_SOURCE_2", "EXT_SOURCE_3")], 1, sd))%>%
   mutate_all(funs(ifelse(is.nan(.), NA, .))) %>% 
   mutate_all(funs(ifelse(is.infinite(.), NA, .))) %>% 
@@ -178,7 +186,8 @@ saveRDS(tr_te, file = paste0(data_dir, "//Calculation//input_bigmatrix_long.rds"
 #---------------------------
 lgbm_feat = data.table(Feature = character(), Gain = numeric(), Cover = numeric(), Frequency = numeric())
 lgbm_pred_list = list()
-lgbm_pred_empt_list = list()
+lgbm_pred_bureau_empt_list = list()
+lgbm_pred_prev_empt_list = list()
 lgbm_score = vector()
 cat("Preparing data...\n")
 for (i in 1:5) {
@@ -226,7 +235,7 @@ for (i in 1:5) {
                        #num_leaves = 255, # typical: 255, usually {15, 31, 63, 127, 255, 511, 1023, 2047, 4095}.
                        #eval = "binary_error", #can place own validation function here #unknown parameter
                        #categorical_feature = categoricals.vec,
-                       num_iterations = 10, #2000, equivalent of n_estimators
+                       num_iterations = 5, #2000, equivalent of n_estimators
                        early_stopping_round = 200,
                        valids = list(train = dval),
                        #nfold = 5, #unknown parameter
@@ -236,7 +245,7 @@ for (i in 1:5) {
   lgbm_pred_list[[i]] = rank(predict(m_gbm_cv, dtest), ties.method = 'first')
   
   #---------------------------
-  cat("Training model for empty vars...\n")
+  cat("Training model for empty bureau vars...\n")
   
   tr_te = readRDS(paste0(data_dir, "//Calculation//input_bigmatrix_long.rds"))
   load(file = paste0(data_dir, "//Calculation//input_tri.RData"), .GlobalEnv)
@@ -254,7 +263,7 @@ for (i in 1:5) {
   
   rm(tr_te, y, tri); gc()
   
-  m_lgbm_empt = lgb.train(params = lgb.grid,
+  m_lgbm_bureau_empt = lgb.train(params = lgb.grid,
                        data = dtrain,
                        num_threads = 10,
                        nrounds = 5,
@@ -263,14 +272,75 @@ for (i in 1:5) {
                        #num_leaves = 255, # typical: 255, usually {15, 31, 63, 127, 255, 511, 1023, 2047, 4095}.
                        #eval = "binary_error", #can place own validation function here #unknown parameter
                        #categorical_feature = categoricals.vec,
-                       num_iterations = 3000, #2000, equivalent of n_estimators
+                       num_iterations = 5, #2000, equivalent of n_estimators
                        early_stopping_round = 200,
                        valids = list(train = dval),
                        #nfold = 5, #unknown parameter
                        #stratified = TRUE, #unknown parameter
                        verbose = 2)
   
-  lgbm_pred_empt_list[[i]] = rank(predict(m_lgbm_empt, dtest), ties.method = 'first')
+  lgbm_pred_bureau_empt_list[[i]] = rank(predict(m_lgbm_bureau_empt, dtest), ties.method = 'first')
+  
+  #---------------------------
+  cat("Training model for empty prev vars...\n")
+  
+  tr_te = readRDS(paste0(data_dir, "//Calculation//input_bigmatrix_long.rds"))
+  load(file = paste0(data_dir, "//Calculation//input_tri.RData"), .GlobalEnv)
+  load(file = paste0(data_dir, "//Calculation//input_y.RData"), .GlobalEnv)
+  
+  tr_te = tr_te[,!colnames(tr_te) %in% drop_cols_prev]
+  
+  dtest <- tr_te[-tri, ]
+  tr_te <- tr_te[tri, ]
+
+  cat("Create validation sample...\n")
+  df_test = data.frame(tr_te[tri,c('EXT_SOURCE_1', 'EXT_SOURCE_2', 'EXT_SOURCE_3')], y, id = 1:nrow(tr_te[tri,]))
+  
+  df_bin = smbinning(df_test, y = 'y', x = 'EXT_SOURCE_1', p = .1)
+  df_test = smbinning.gen(df_test, df_bin, chrname = 'EXT_SOURCE_1_BIN')
+  
+  df_bin = smbinning(df_test, y = 'y', x = 'EXT_SOURCE_2', p = .1)
+  df_test = smbinning.gen(df_test, df_bin, chrname = 'EXT_SOURCE_2_BIN')
+  
+  df_bin = smbinning(df_test, y = 'y', x = 'EXT_SOURCE_3', p = .1)
+  df_test = smbinning.gen(df_test, df_bin, chrname = 'EXT_SOURCE_3_BIN')
+
+  df_test = as.data.table(df_test)
+  df_test[is.na(EXT_SOURCE_2), 
+          `:=` (EXT_SOURCE_1_BIN = 'EXT_SOURCE_2_NA', 
+                EXT_SOURCE_2_BIN = 'EXT_SOURCE_2_NA', 
+                EXT_SOURCE_3_BIN = 'EXT_SOURCE_2_NA')]
+  df_test = df_test[,.(EXT_SOURCE_1_BIN, EXT_SOURCE_2_BIN, EXT_SOURCE_3_BIN, y, id)]
+  
+  df_fin <- df_test %>%
+    group_by(EXT_SOURCE_1_BIN, EXT_SOURCE_2_BIN, EXT_SOURCE_3_BIN, y) %>%
+    sample_frac(., 0.9) #%>%
+  
+  tri = df_fin$id
+  
+  dtrain = lgb.Dataset(data = tr_te[tri, ], label = y[tri])
+  dval = lgb.Dataset(data = tr_te[-tri, ], label = y[-tri])
+  cols <- colnames(tr_te)
+  
+  rm(tr_te, y, tri); gc()
+  
+  m_lgbm_prev_empt = lgb.train(params = lgb.grid,
+                                 data = dtrain,
+                                 num_threads = 10,
+                                 nrounds = 5,
+                                 eval_freq = 20,
+                                 #boosting = 'dart', # todo: check the difference
+                                 #num_leaves = 255, # typical: 255, usually {15, 31, 63, 127, 255, 511, 1023, 2047, 4095}.
+                                 #eval = "binary_error", #can place own validation function here #unknown parameter
+                                 #categorical_feature = categoricals.vec,
+                                 num_iterations = 3000, #2000, equivalent of n_estimators
+                                 early_stopping_round = 200,
+                                 valids = list(train = dval),
+                                 #nfold = 5, #unknown parameter
+                                 #stratified = TRUE, #unknown parameter
+                                 verbose = 2)
+  
+  lgbm_pred_prev_empt_list[[i]] = rank(predict(m_lgbm_prev_empt, dtest), ties.method = 'first')
   
   lgbm_feat = rbindlist(list(lgbm_feat, lgb.importance(m_gbm_cv, percentage = TRUE)))
   lgbm_score[i] = m_gbm_cv$best_score
@@ -280,9 +350,13 @@ avg_lgbm = Reduce(`+`, lgbm_pred_list)
 avg_lgbm = avg_lgbm/i
 avg_lgbm = avg_lgbm/max(avg_lgbm)
 
-avg_lgbm_empt = Reduce(`+`, lgbm_pred_empt_list)
-avg_lgbm_empt = avg_lgbm_empt/i
-avg_lgbm_empt = avg_lgbm_empt/max(avg_lgbm_empt)
+avg_lgbm_bureau_empt = Reduce(`+`, lgbm_pred_bureau_empt_list)
+avg_lgbm_bureau_empt = avg_lgbm_bureau_empt/i
+avg_lgbm_bureau_empt = avg_lgbm_bureau_empt/max(avg_lgbm_bureau_empt)
+
+avg_lgbm_prev_empt = Reduce(`+`, lgbm_pred_prev_empt_list)
+avg_lgbm_prev_empt = avg_lgbm_prev_empt/i
+avg_lgbm_prev_empt = avg_lgbm_prev_empt/max(avg_lgbm_prev_empt)
 
 lgbm_feat_avg = lgbm_feat %>% group_by(Feature) %>%
   summarize(gain_avg = mean(Gain),
@@ -294,10 +368,12 @@ lgbm_score_avg = mean(lgbm_score)
 
 read_csv(file.path(data_dir, "//Models//sample_submission.csv")) %>%
   left_join(empt_sum_bureau, by = "SK_ID_CURR") %>%
+  left_join(empt_sum_prev, by = "SK_ID_CURR") %>%
   mutate(SK_ID_CURR = as.integer(SK_ID_CURR),
          TARGET_ORD = avg_lgbm,
-         TARGET_EMPT = avg_lgbm_empt,
-         TARGET = if_else(is.na(IsEmptBureau), TARGET_ORD, TARGET_EMPT)) %>%
+         TARGET_EMPT_BUREAU = avg_lgbm_bureau_empt,
+         TARGET_EMPT_PREV = avg_lgbm_prev_empt,
+         TARGET = if_else(!is.na(IsEmptPrev), TARGET_EMPT_PREV, if_else(!is.na(IsEmptBureau), TARGET_EMPT_BUREAU, TARGET_ORD))) %>%
   #select(-c(IsEmptBureau)) %>%
   write_csv(file.path(data_dir, paste0("//Models//new_mod_fix_", round(lgbm_score_avg, 5), ".csv")))
 

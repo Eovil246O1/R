@@ -5,8 +5,6 @@ library(data.table)
 library(recommenderlab)
 library(tidyverse)
 
-set.seed(0)
-
 #---------------------------
 cat("Loading data...\n")
 

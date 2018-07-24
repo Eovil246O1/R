@@ -1,19 +1,18 @@
 library(tidyverse)
 library(xgboost)
 library(magrittr)
-set.seed(0)
-
+data_dir = "C:\\Users\\Viacheslav_Pyrohov\\Desktop\\Kaggle_Homecredit competition"
 #---------------------------
 cat("Loading data...\n")
 
-bbalance <- read_csv("../input/bureau_balance.csv") 
-bureau <- read_csv("../input/bureau.csv")
-cc_balance <- read_csv("../input/credit_card_balance.csv")
-payments <- read_csv("../input/installments_payments.csv") 
-pc_balance <- read_csv("../input/POS_CASH_balance.csv")
-prev <- read_csv("../input/previous_application.csv")
-tr <- read_csv("../input/application_train.csv") 
-te <- read_csv("../input/application_test.csv")
+bbalance <- read_csv(file.path(data_dir, "bureau_balance.csv"))
+bureau <- read_csv(file.path(data_dir, "bureau.csv"))
+cc_balance <- read_csv(file.path(data_dir, "credit_card_balance.csv"))
+payments <- read_csv(file.path(data_dir, "installments_payments.csv"))
+pc_balance <- read_csv(file.path(data_dir, "POS_CASH_balance.csv"))
+prev <- read_csv(file.path(data_dir, "previous_application.csv"))
+tr <- read_csv(file.path(data_dir, "application_train.csv"))
+te <- read_csv(file.path(data_dir, "application_test.csv"))
 
 #---------------------------
 cat("Preprocessing...\n")
