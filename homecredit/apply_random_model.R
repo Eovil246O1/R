@@ -365,8 +365,8 @@ for (i in 1:50) {
   m_gbm_cv = lgb.train(params = lgb.grid,
                        data = dtrain,
                        num_threads = 10,
-                       nrounds = 5,
-                       eval_freq = 20,
+                       #nrounds = 5, #deleted to increase speed
+                       eval_freq = 50, #increased to increase speed
                        #boosting = 'dart', # todo: check the difference
                        #num_leaves = 255, # typical: 255, usually {15, 31, 63, 127, 255, 511, 1023, 2047, 4095}.
                        #eval = "binary_error", #can place own validation function here #unknown parameter
