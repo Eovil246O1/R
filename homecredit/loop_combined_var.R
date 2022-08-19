@@ -62,7 +62,3 @@ View(res_fin)
 write_csv(res_fin, file.path(data_dir, paste0("//Results//add2arg_corr.csv")))
 
 #------------------------
-
-traceback()
-warnings()
-list_transformations = c('power', 'log', rep('n', 10))

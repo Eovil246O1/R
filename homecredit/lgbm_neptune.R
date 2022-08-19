@@ -8,7 +8,7 @@ library(tidyverse)
 #---------------------------
 cat("Loading data...\n")
 
-data_dir = "C:\\Users\\Viacheslav_Pyrohov\\Desktop\\Kaggle_Homecredit competition"
+data_dir = "C:\\Users\\Eovil\\Desktop\\Kaggle_Homecredit competition"
 
 tr <- read_csv(file.path(data_dir, "application_train.csv"))
 te <- read_csv(file.path(data_dir, "application_test.csv"))
@@ -162,7 +162,9 @@ tr_te <- tr %>%
          CAR_TO_BIRTH_RATIO = OWN_CAR_AGE / DAYS_BIRTH,
          CAR_TO_EMPLOY_RATIO = OWN_CAR_AGE / DAYS_EMPLOYED,
          PHONE_TO_BIRTH_RATIO = DAYS_LAST_PHONE_CHANGE / DAYS_BIRTH,
-         PHONE_TO_EMPLOY_RATIO = DAYS_LAST_PHONE_CHANGE / DAYS_EMPLOYED)
+         PHONE_TO_EMPLOY_RATIO = DAYS_LAST_PHONE_CHANGE / DAYS_EMPLOYED,
+         #neptune
+         ORGANIZATION_TYPE = ifelse(ORGANIZATION_TYPE == 'XNA', NA, ORGANIZATION_TYPE))
 
 docs <- str_subset(names(tr), "FLAG_DOC")
 live <- str_subset(names(tr), "(?!NFLAG_)(?!FLAG_DOC)(?!_FLAG_)FLAG_")

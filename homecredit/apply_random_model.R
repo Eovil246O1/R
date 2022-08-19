@@ -10,7 +10,7 @@ library(sqldf)
 #---------------------------
 cat("Loading data...\n")
 
-data_dir = "C:\\Users\\Viacheslav_Pyrohov\\Desktop\\Kaggle_Homecredit competition"
+data_dir = "C:\\Users\\Eovil\\Desktop\\Kaggle_Homecredit competition"
 
 tr <- read_csv(file.path(data_dir, "application_train.csv"))
 te <- read_csv(file.path(data_dir, "application_test.csv"))
@@ -403,4 +403,4 @@ for (i in 1:50) {
 View(lgbm_fin)
 
 # write file with characteristic parameters
-write_csv(lgbm_fin, file.path(data_dir, paste0("//Results//rand_mod_importance_monday.csv")))
+write_csv(lgbm_fin, file.path(data_dir, paste0("//Results//rand_mod_importance_22iter.csv")))
